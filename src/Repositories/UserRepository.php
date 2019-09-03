@@ -6,26 +6,26 @@ namespace Repositories;
 
 use PDO;
 use PDOException;
-use phpDocumentor\Reflection\Type;
 
 class UserRepository extends AbstractUserRepository
+    implements IGettingOrder, IOperatingOrder
 {
-    public function registration($login, $password)
-    {
-        try {
-            $query = $this->db->prepare('insert into users (login, password, type_user_id) 
-                                        values (?, ?, ?)');
-            return $query->execute([$login, $password, 1]);
-        } catch (PDOException $e) {
-            return false;
-        }
-    }
-
     public function getBuyOrders()
     {
         $query = $this->db->prepare('select buyer_id "buyer", name "item", price from orders
                                     join buy_order bo on orders.id = bo.id
                                     join items i on bo.item_id = i.id');
+        $query->execute();
+        return $query->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getSaleOrders()
+    {
+        $query = $this->db->prepare('select login "seller", name "item", price from orders 
+                                    join sell_order so on orders.id = so.id
+                                    join inventories i on so.inventory_id = i.id
+                                    join users u on i.user_id = u.id
+                                    join items i2 on i.item_id = i2.id');
         $query->execute();
         return $query->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -40,17 +40,6 @@ class UserRepository extends AbstractUserRepository
         return $query->fetch(PDO::FETCH_ASSOC);
     }
 
-    public function getSellOrders()
-    {
-        $query = $this->db->prepare('select login "seller", name "item", price from orders 
-                                    join sell_order so on orders.id = so.id
-                                    join inventories i on so.inventory_id = i.id
-                                    join users u on i.user_id = u.id
-                                    join items i2 on i.item_id = i2.id');
-        $query->execute();
-        return $query->fetchAll(PDO::FETCH_ASSOC);
-    }
-
     public function getSellOrdersPrice($price, $item){
         $query = $this->db->prepare('select orders.id "id", login "seller", name "item", price from orders 
                                     join sell_order so on orders.id = so.id
@@ -60,19 +49,6 @@ class UserRepository extends AbstractUserRepository
                                     where price <= ?
                                     and item_id = ?');
         $query->execute([$price, $item]);
-        return $query->fetch(PDO::FETCH_ASSOC);
-    }
-
-    public function getOrder($id){
-        $query = $this->db->prepare('select * from orders where id = ?');
-        $query->execute([$id]);
-        return $query->fetch(PDO::FETCH_ASSOC);
-    }
-
-    public function getItemInfo(int $orderId)
-    {
-        $query = $this->db->prepare('select * from orders where id = ?');
-        $query->execute([$orderId]);
         return $query->fetch(PDO::FETCH_ASSOC);
     }
 
@@ -142,31 +118,6 @@ class UserRepository extends AbstractUserRepository
         }
     }
 
-    //TODO: продажа конкретного предмета из инвентаря!
-    public function createSellOrder($inventory_id, $price)
-    {
-        try{
-            $this->db->beginTransaction();
-            $query = $this->db->prepare('insert into orders (price) values (?)');
-            $query->execute([$price]);
-            $lastId = $this->db->lastInsertId();
-            $query = $this->db->prepare('insert into sell_order (id, inventory_id) values (?, ?)');
-            $query->execute([$lastId, $inventory_id]);
-            $query = $this->db->prepare('select user_id, item_id from inventories where id = ?');
-            $query->execute([$inventory_id]);
-            $inventoryInfo = $query->fetch(PDO::FETCH_ASSOC);
-            $seller = $inventoryInfo['user_id'];
-            $item = $inventoryInfo['item_id'];
-            $query = $this->db->prepare('insert into journal (seller_id, item_id, price, date) values (?, ?, ?, now())');
-            $query->execute([$seller, $item, $price]);
-            $this->db->commit();
-            return true;
-        } catch (PDOException $e){
-            $this->db->rollBack();
-            return false;
-        }
-    }
-
     public function createBuyOrder($buyerId, $itemId, $price)
     {
         try{
@@ -187,6 +138,30 @@ class UserRepository extends AbstractUserRepository
         }
     }
 
+    public function createSaleOrder($inventoryId, $price)
+    {
+        try {
+            $this->db->beginTransaction();
+            $query = $this->db->prepare('insert into orders (price) values (?)');
+            $query->execute([$price]);
+            $lastId = $this->db->lastInsertId();
+            $query = $this->db->prepare('insert into sell_order (id, inventory_id) values (?, ?)');
+            $query->execute([$lastId, $inventoryId]);
+            $query = $this->db->prepare('select user_id, item_id from inventories where id = ?');
+            $query->execute([$inventoryId]);
+            $inventoryInfo = $query->fetch(PDO::FETCH_ASSOC);
+            $seller = $inventoryInfo['user_id'];
+            $item = $inventoryInfo['item_id'];
+            $query = $this->db->prepare('insert into journal (seller_id, item_id, price, date) values (?, ?, ?, now())');
+            $query->execute([$seller, $item, $price]);
+            $this->db->commit();
+            return true;
+        } catch (PDOException $e) {
+            $this->db->rollBack();
+            return false;
+        }
+    }
+
     public function cancelOrder($idOrder)
     {
         try{
@@ -198,7 +173,7 @@ class UserRepository extends AbstractUserRepository
         }
     }
 
-    public function updateOrder($orderId, array $data)
+    public function updateOrder($orderId, $params)
     {
 
     }
@@ -223,5 +198,12 @@ class UserRepository extends AbstractUserRepository
                                     and item_id = ?');
         $query->execute([$item]);
         return $query->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getOrderInfo($id)
+    {
+        $query = $this->db->prepare('select * from orders where id = ?');
+        $query->execute([$id]);
+        return $query->fetch(PDO::FETCH_ASSOC);
     }
 }

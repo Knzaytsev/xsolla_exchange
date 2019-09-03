@@ -5,8 +5,9 @@ namespace Repositories;
 
 
 use PDO;
+use PDOException;
 
-abstract class AbstractUserRepository
+class AbstractUserRepository implements IGettingInfo, IEnteringExchange
 {
     /**
      * @var PDO
@@ -27,40 +28,53 @@ abstract class AbstractUserRepository
         return $query->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function getAllItems()
+    public function registration($login, $password)
     {
-        $query = $this->db->prepare('select name "item" from items');
-        $query->execute();
-        return $query->fetchAll(PDO::FETCH_ASSOC);
+        try {
+            $query = $this->db->prepare('insert into users (login, password, type_user_id) 
+                                        values (?, ?, ?)');
+            return $query->execute([$login, $password, 1]);
+        } catch (PDOException $e) {
+            return false;
+        }
     }
 
     public function getStatusExchange()
     {
-        return $this->executeStatement('select commission, count(distinct items.id) "items", count(distinct orders.id) "orders"
-                                        from exchanges, items, orders
-                                        group by commission');
-    }
-
-    private function executeStatement(string $statement)
-    {
-        $query = $this->db->prepare($statement);
+        $query = $this->db->prepare('select commission, count(distinct items.id) "items", count(distinct orders.id) "orders"
+                                    from exchanges, items, orders
+                                    group by commission');
         $query->execute();
         return $query->fetch(PDO::FETCH_ASSOC);
     }
 
-    public function getPeriodRevenue($from, $to, $login)
+    public function getUserByLogin($login){
+        $query = $this->db->prepare('select * from users where login = ?');
+        $query->execute([$login]);
+        $user = $query->fetch(PDO::FETCH_ASSOC);
+        $query = $this->db->prepare('select * from inventories where user_id = ?');
+        $query->execute([$user['id']]);
+        $inventory = $query->fetchAll(PDO::FETCH_ASSOC);
+        return array('user' => $user, 'inventory' => $inventory);
+    }
+
+    public function getItems()
+    {
+        $query = $this->db->prepare('select id, name "item" from items');
+        $query->execute();
+        return $query->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getRevenuePeriod($from, $to)
     {
         $query = $this->db->prepare('select login, sum(price) "sum" from journal
                                     join users u on journal.seller_id = u.id
-                                    where date between str_to_date(?, \'%d.%m.%Y\') and str_to_date(?, \'%d.%m.%Y\')
-                                    and login = ?');
-        $query->execute([$from, $to, $login]);
+                                    where date between str_to_date(?, \'%d.%m.%Y\') and str_to_date(?, \'%d.%m.%Y\')');
+        $query->execute([$from, $to]);
         return $query->fetch(PDO::FETCH_ASSOC);
     }
 
-    //TODO: Продумать лучше!
-
-    public function getPeriodTopItems($from, $to)
+    public function getTopItemsPeriod($from, $to)
     {
         $query = $this->db->prepare('select name, count(j.item_id) "count" from items
                                     join journal j on items.id = j.item_id
@@ -73,7 +87,7 @@ abstract class AbstractUserRepository
         return $query->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function getPeriodTopUsers($from, $to)
+    public function getTopUsersPeriod($from, $to)
     {
         $query = $this->db->prepare('select login, sum(price) "revenue", sum(item_id) "items" from users
                                     join journal j on users.id = j.buyer_id
@@ -87,23 +101,13 @@ abstract class AbstractUserRepository
         return $query->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function getUser($userId)
+    public function getUserById($id)
     {
         $query = $this->db->prepare('select * from users where id = ?');
-        $query->execute([$userId]);
+        $query->execute([$id]);
         $user = $query->fetch(PDO::FETCH_ASSOC);
         $query = $this->db->prepare('select * from inventories where user_id = ?');
-        $query->execute([$userId]);
-        $inventory = $query->fetchAll(PDO::FETCH_ASSOC);
-        return array('user' => $user, 'inventory' => $inventory);
-    }
-
-    public function getUserByLogin($login){
-        $query = $this->db->prepare('select * from users where login = ?');
-        $query->execute([$login]);
-        $user = $query->fetch(PDO::FETCH_ASSOC);
-        $query = $this->db->prepare('select * from inventories where user_id = ?');
-        $query->execute([$user['id']]);
+        $query->execute([$id]);
         $inventory = $query->fetchAll(PDO::FETCH_ASSOC);
         return array('user' => $user, 'inventory' => $inventory);
     }

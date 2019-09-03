@@ -7,32 +7,9 @@ namespace Repositories;
 use PDO;
 use PDOException;
 
-class AdministratorRepository extends AbstractUserRepository
+class AdministratorRepository extends UserRepository
+    implements IOperatingUserBalance, IOperatingUserItem, IOperatingExchange
 {
-    public function addBalance($value, $idUser)
-    {
-        try {
-            $query = $this->db->prepare('update users set balance = ? + balance
-                                        where id = ?');
-            $query->execute([$value, $idUser]);
-            return true;
-        } catch (PDOException $e) {
-            return false;
-        }
-    }
-
-    public function subtractBalance($value, $idUser)
-    {
-        try {
-            $query = $this->db->prepare('update users set balance = balance - ? 
-                                        where id = ?');
-            $query->execute([$value, $idUser]);
-            return true;
-        } catch (PDOException $e) {
-            return false;
-        }
-    }
-
     public function createItem($name)
     {
         try {
@@ -72,5 +49,29 @@ class AdministratorRepository extends AbstractUserRepository
         $query = $this->db->prepare('select money from exchanges');
         $query->execute();
         return $query->fetch(PDO::FETCH_ASSOC);
+    }
+
+    public function addToBalance($id, $sum)
+    {
+        try {
+            $query = $this->db->prepare('update users set balance = ? + balance
+                                        where id = ?');
+            $query->execute([$sum, $id]);
+            return true;
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+
+    public function subtractFromBalance($id, $sum)
+    {
+        try {
+            $query = $this->db->prepare('update users set balance = balance - ? 
+                                        where id = ?');
+            $query->execute([$sum, $id]);
+            return true;
+        } catch (PDOException $e) {
+            return false;
+        }
     }
 }
